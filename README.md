@@ -14,3 +14,5 @@
     ```bash
     docker-compose up --build -d
     ```
+
+Link Medium: https://medium.com/@syafriedwif/learning-apache-iceberg-building-elt-pipeline-6f7eeab405bc
