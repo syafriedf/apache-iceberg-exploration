@@ -1,0 +1,112 @@
+version: '3.8'
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: custom-airflow:latest
+    env_file:
+      - .env
+    depends_on:
+      - postgres_airflow
+      - postgres_dwh
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./include:/opt/airflow/include
+      - ./docker/entrypoint.sh:/entrypoint.sh
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "airflow scheduler & airflow webserver"
+
+  postgres_airflow:
+    image: postgres:13
+    container_name: postgres_airflow
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_airflow_data:/var/lib/postgresql/data
+    restart: always
+
+  postgres_dwh:
+    image: postgres:13
+    container_name: postgres_dwh
+    environment:
+      POSTGRES_USER: ${DWH_USER}
+      POSTGRES_PASSWORD: ${DWH_PASSWORD}
+      POSTGRES_DB: ${DWH_DB}
+    ports:
+      - "5433:5432"  # Bind port eksternal 5433 ke internal 5432
+    volumes:
+      - postgres_dwh_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+
+  spark-master:
+    image: bitnami/spark:latest
+    container_name: spark-master-minio-iceberg
+    environment:
+      - SPARK_MODE=master
+      - SPARK_SUBMIT_ARGS=--packages org.apache.iceberg:iceberg-spark3-runtime:0.12.0
+    ports:
+      - "7077:7077"
+      - "8090:8090"
+      
+  spark-worker:
+    image: bitnami/spark:latest
+    container_name: spark-worker-minio-iceberg
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_SUBMIT_ARGS=--packages org.apache.iceberg:iceberg-spark3-runtime:0.12.0
+    depends_on:
+      - spark-master
+    ports:
+      - "8081:8081"
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":${MINIO_PORT_CONSOLE}"
+    env_file:
+      - .env
+    ports:
+      - "${MINIO_PORT_API}:${MINIO_PORT_API}"
+      - "${MINIO_PORT_CONSOLE}:${MINIO_PORT_CONSOLE}"
+    volumes:
+      - minio_data:/data
+  
+  # spark-jupyter:
+  #   image: alexmerced/spark35nb:latest
+  #   container_name: spark-jupyter
+  #   ports:
+  #     - "8888:8888"    # Jupyter Notebook
+  #     - "7077:7077"    # Spark Master port
+  #     - "8090:8090"    # Spark Master Web UI
+  #     - "8081:8081"    # Spark Worker Web UI
+  #   environment:
+  #     - AWS_ACCESS_KEY_ID=admin
+  #     - AWS_SECRET_ACCESS_KEY=password
+  #     - AWS_REGION=us-east-1
+  #     - SPARK_HOME=/opt/spark
+  #     - SPARK_MODE=worker
+  #     - SPARK_MASTER_URL=spark://spark-master:7077
+  #     - SPARK_SUBMIT_ARGS=--packages org.apache.iceberg:iceberg-spark3-runtime:0.12.0
+  #   volumes:
+  #     - ./notebooks:/home/jovyan/work
+  #     - ./warehouse:/home/iceberg/warehouse
+  #   command: >
+  #     /bin/bash -c "
+  #     /opt/spark/sbin/start-master.sh && \
+  #     /opt/spark/sbin/start-worker.sh spark://spark:7077 && \
+  #     jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+  #     "
+
+volumes:
+  postgres_data:
+  minio_data:
+  postgres_airflow_data:
+  postgres_dwh_data:
