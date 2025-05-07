@@ -1,1 +1,7 @@
 minio
+minio
+pyspark
+apache-airflow-providers-apache-spark
+apache-airflow-providers-postgres
+pandas
+psycopg2-binary
