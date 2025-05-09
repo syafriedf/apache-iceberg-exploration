@@ -9,6 +9,7 @@ from pyspark import SparkConf
 from minio import Minio
 
 from airflow import DAG
+from airflow.utils.dates import days_ago
 from airflow.decorators import task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
